@@ -102,3 +102,28 @@ export async function createApp({ db, secret, origins = [], authLimit = 10 }) {
   });
   return app;
 }
+
+// Vercel importa este archivo directamente; la inicializacion se comparte por instancia.
+let deploymentApp;
+async function initializeDeploymentApp() {
+  const { readConfig } = await import('./config.js');
+  const { openDatabase } = await import('./database.js');
+  const config = readConfig();
+  const db = await openDatabase(config);
+  try {
+    return await createApp({ db, secret: config.JWT_SECRET,
+      origins: config.CORS_ORIGINS.split(',').map(v => v.trim()).filter(Boolean) });
+  } catch (error) {
+    await db.end();
+    throw error;
+  }
+}
+
+export default async function handler(req, res) {
+  deploymentApp ??= initializeDeploymentApp().catch(error => {
+    deploymentApp = undefined;
+    throw error;
+  });
+  const app = await deploymentApp;
+  return app(req, res);
+}
