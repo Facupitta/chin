@@ -54,7 +54,7 @@ Registro y login reciben solamente:
 { "username": "facu", "password": "Una-clave-segura-123" }
 ```
 
-Contraseña de 12–128 caracteres, sin recortarla ni transformarla. Los campos adicionales se rechazan. El registro no permite definir `tokens`, fechas ni id. No hay endpoints para listar otros usuarios.
+La contraseña debe ser un string, sin restricciones de longitud o contenido (incluso puede estar vacía), sin recortarla ni transformarla. Se mantiene el límite general de 8 KB por solicitud. Los campos adicionales se rechazan. El registro no permite definir `tokens`, fechas ni id. No hay endpoints para listar otros usuarios.
 
 Para sumar tokens: `POST /api/users/me/tokens`, con `Authorization: Bearer <JWT>` y `Content-Type: application/json`:
 
@@ -77,7 +77,7 @@ Invoke-RestMethod http://127.0.0.1:3000/api/users/me -Headers @{ Authorization =
 
 Login devuelve `access_token`, `token_type: "Bearer"`, `expires_in: 900` (15 minutos) y `user`. No hay refresh token ni revocación individual: al cerrar sesión el cliente descarta el JWT; un JWT emitido sigue siendo válido hasta su vencimiento. El registro no inicia sesión automáticamente.
 
-Errores: 400 datos inválidos, 401 autenticación inválida, 404 ruta inexistente, 409 username ocupado, 413 cuerpo demasiado grande, 429 límite de solicitudes y 500 error interno sin detalles sensibles.
+Errores: 400 datos inválidos, 401 autenticación inválida, 404 ruta inexistente, 409 username ocupado, 413 cuerpo demasiado grande y 500 error interno sin detalles sensibles.
 
 ## Seguridad y despliegue
 
@@ -85,7 +85,7 @@ Errores: 400 datos inválidos, 401 autenticación inválida, 404 ruta inexistent
 - JWT HS256 con expiración, algoritmo, emisor y audiencia verificados. Se exige un secreto de al menos 64 caracteres; generarlo aleatoriamente como se indica arriba.
 - Consultas parametrizadas, validación estricta, Helmet, respuestas no cacheables y JSON limitado a 8 KB.
 - CORS permite exclusivamente los orígenes de `CORS_ORIGINS`. CORS controla acceso desde navegadores, no reemplaza autenticación.
-- Límite por IP: 100 solicitudes/minuto y 10 intentos de registro/login combinados cada 15 minutos, incluyendo éxitos. Los contadores están en memoria y se reinician con el proceso.
+- Temporalmente no hay límites de solicitudes ni intentos de registro/login por IP.
 - Para producción, colocar detrás de HTTPS, configurar credenciales y backups de PostgreSQL y los orígenes reales. `HOST=0.0.0.0` permite escuchar fuera de localhost, por ejemplo en contenedores.
 - `trust proxy` permanece deshabilitado. Si se despliega detrás de un proxy, configurarlo según la topología confiable antes de usar límites por IP; no habilitarlo indiscriminadamente. Para múltiples instancias se necesita almacenamiento compartido de límites.
 

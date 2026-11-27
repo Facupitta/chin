@@ -1,7 +1,6 @@
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
-import { rateLimit } from 'express-rate-limit';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { randomBytes } from 'node:crypto';
@@ -9,7 +8,7 @@ import { hashPassword, verifyPassword } from './password.js';
 
 const credentials = z.object({
   username: z.string().trim().min(3).max(32).regex(/^[a-zA-Z0-9_]+$/).transform(v => v.toLowerCase()),
-  password: z.string().min(12).max(128),
+  password: z.string(),
 }).strict();
 const publicColumns = 'id, username, tokens, creation_date, last_login_date';
 const issuer = 'super-tournament-api';
@@ -18,7 +17,7 @@ const expiresIn = 900;
 const maxTokens = 2_147_483_647;
 const tokenIncrement = z.object({ amount: z.number().int().positive().max(maxTokens) }).strict();
 
-export async function createApp({ db, secret, origins = [], authLimit = 10 }) {
+export async function createApp({ db, secret, origins = [] }) {
   // El usuario inexistente también ejecuta scrypt para reducir diferencias de tiempo.
   const dummyHash = await hashPassword(randomBytes(32).toString('hex'));
   const app = express();
@@ -26,13 +25,7 @@ export async function createApp({ db, secret, origins = [], authLimit = 10 }) {
   app.use(helmet());
   app.use((req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
   app.use(cors({ origin: origins, methods: ['GET', 'POST'], allowedHeaders: ['Content-Type', 'Authorization'] }));
-  app.use(rateLimit({ windowMs: 60_000, limit: 100, standardHeaders: 'draft-8', legacyHeaders: false,
-    message: { error: 'Demasiadas solicitudes. Intentá nuevamente más tarde.' } }));
   app.use(express.json({ limit: '8kb' }));
-
-  const authLimiter = rateLimit({ windowMs: 15 * 60_000, limit: authLimit,
-    standardHeaders: 'draft-8', legacyHeaders: false,
-    message: { error: 'Demasiados intentos. Intentá nuevamente más tarde.' } });
 
   function validate(req, res, next) {
     const parsed = credentials.safeParse(req.body);
@@ -41,7 +34,7 @@ export async function createApp({ db, secret, origins = [], authLimit = 10 }) {
     next();
   }
 
-  app.post('/api/auth/register', authLimiter, validate, async (req, res) => {
+  app.post('/api/auth/register', validate, async (req, res) => {
     const { username, password } = req.credentials;
     const hash = await hashPassword(password);
     const result = await db.query(`INSERT INTO "User" (username, password) VALUES ($1, $2) ON CONFLICT(username) DO NOTHING RETURNING ${publicColumns}`, [username, hash]);
@@ -50,7 +43,7 @@ export async function createApp({ db, secret, origins = [], authLimit = 10 }) {
     res.status(201).json({ user });
   });
 
-  app.post('/api/auth/login', authLimiter, validate, async (req, res) => {
+  app.post('/api/auth/login', validate, async (req, res) => {
     const { username, password } = req.credentials;
     const { rows: [user] } = await db.query('SELECT * FROM "User" WHERE username = $1', [username]);
     const valid = await verifyPassword(password, user?.password ?? dummyHash);

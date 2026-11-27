@@ -1,9 +1,16 @@
 import pg from 'pg';
 
 export async function openDatabase(config) {
+  // La URL tiene prioridad y conserva sus parametros SSL (sslmode).
+  const connection = config.DATABASE_URL
+    ? { connectionString: config.DATABASE_URL }
+    : { host: config.PGHOST, port: config.PGPORT,
+        database: config.PGDATABASE, user: config.PGUSER, password: config.PGPASSWORD };
+  const ssl = config.PGSSLMODE === undefined ? {} : {
+    ssl: config.PGSSLMODE === 'disable' ? false : { rejectUnauthorized: true },
+  };
   const db = new pg.Pool({
-    host: config.PGHOST, port: config.PGPORT,
-    database: config.PGDATABASE, user: config.PGUSER, password: config.PGPASSWORD,
+    ...connection, ...ssl,
     max: 10, connectionTimeoutMillis: 5000, idleTimeoutMillis: 30000,
   });
   db.on('error', error => console.error('Error de conexión PostgreSQL:', error.code));

@@ -17,7 +17,7 @@ async function fixture(t, options = {}) {
   await db.query('BEGIN');
   // Tabla temporal privada por prueba; no modifica usuarios reales.
   await db.query('CREATE TEMP TABLE "User" (LIKE public."User" INCLUDING ALL) ON COMMIT DROP');
-  return { db, api: request(await createApp({ db, secret, authLimit: 100, ...options })) };
+  return { db, api: request(await createApp({ db, secret, ...options })) };
 }
 
 test('registro, hash, login, JWT y aislamiento del usuario', async t => {
@@ -62,7 +62,7 @@ test('rechaza credenciales, JWT alterados, expirados y de otro emisor', async t 
 
 test('validación, asignación masiva, JSON inválido y límite de cuerpo', async t => {
   const { api, db } = await fixture(t);
-  for (const body of [null, {}, { ...credentials, password: 'corta' }, { ...credentials, username: "' OR 1=1 --" }, { ...credentials, tokens: 100 }, { ...credentials, id: 9 }]) {
+  for (const body of [null, {}, { ...credentials, password: 123 }, { ...credentials, password: null }, { username: credentials.username }, { ...credentials, username: "' OR 1=1 --" }, { ...credentials, tokens: 100 }, { ...credentials, id: 9 }]) {
     await api.post('/api/auth/register').send(body ?? {}).expect(400);
   }
   await api.post('/api/auth/register').set('Content-Type', 'application/json').send('{').expect(400);
@@ -71,11 +71,27 @@ test('validación, asignación masiva, JSON inválido y límite de cuerpo', asyn
   await api.get('/missing').expect(404);
 });
 
-test('rate limit de autenticación y CORS por origen explícito', async t => {
-  const { api } = await fixture(t, { authLimit: 2, origins: ['http://localhost:5173'] });
-  await api.post('/api/auth/login').send(credentials).expect(401);
-  await api.post('/api/auth/login').send(credentials).expect(401);
-  await api.post('/api/auth/login').send(credentials).expect(429);
+test('registro y login aceptan contraseñas sin restricciones de longitud o contenido', async t => {
+  const { api } = await fixture(t);
+  for (const [index, password] of ['', 'a', '   ', '🔑 contraseña', 'x'.repeat(129)].entries()) {
+    const body = { username: `user_${index}`, password };
+    await api.post('/api/auth/register').send(body).expect(201);
+    await api.post('/api/auth/login').send(body).expect(200);
+  }
+});
+
+test('no limita solicitudes por IP en registro ni login', async t => {
+  const { api } = await fixture(t);
+  for (let attempt = 0; attempt < 102; attempt++) {
+    const route = attempt % 2 === 0 ? 'register' : 'login';
+    await api.post(`/api/auth/${route}`).send({}).expect(400);
+  }
+  await api.post('/api/auth/register').send(credentials).expect(201);
+  await api.post('/api/auth/login').send(credentials).expect(200);
+});
+
+test('CORS por origen explícito', async t => {
+  const { api } = await fixture(t, { origins: ['http://localhost:5173'] });
   const allowed = await api.get('/api/users/me').set('Origin', 'http://localhost:5173');
   assert.equal(allowed.headers['access-control-allow-origin'], 'http://localhost:5173');
   const denied = await api.get('/api/users/me').set('Origin', 'https://otro.example');

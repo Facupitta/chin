@@ -1,1 +1,7 @@
-db: heliohost
+db:
+heliohost
+https://console.prisma.io/h4bxf5z9i8p00jvjiau1sxr0/x1stnijgdiex2uk5nnnvks5y/y9crk480epc1mu26zihbfpe3/dashboard
+conexion = postgres://5e4ec58c5129778081b7718471881e4f41eb11a40c2b75a2dc4d1dfa9378bfeb:sk_6HVJjuG6ANoXiKnilC65S@db.prisma.io:5432/postgres?sslmode=require
+
+
+backend: https://vercel.com/facupitta/chin
